@@ -13,10 +13,8 @@ import { buildSky, buildLights, buildGround, buildWater, updateSun } from './wor
 import { buildProps } from './world/props.js';
 import { SPAWN, SPIRE } from './world/layout.js';
 import { createCharacterAtlas } from './characters/atlas.js';
-import { Rig } from './characters/rig.js';
+import { loadSculpt } from './characters/sculpt.js';
 import { Animator, KID_STYLE } from './characters/animator.js';
-import { makeFaceSet } from './characters/faces.js';
-import { PROTAGONIST } from './characters/specs.js';
 import { PlayerController } from './player/controller.js';
 import { ThirdPersonCamera } from './player/camera.js';
 import { PockyHunt } from './game/pocky.js';
@@ -87,15 +85,19 @@ async function boot() {
 	await progress( 0.62, 'Hiding the Pocky…' );
 	const hunt = new PockyHunt( scene, physics, city );
 
-	await progress( 0.68, 'Sculpting the cat kid…' );
+	await progress( 0.68, 'Rigging the cat kid…' );
 	const atlas = createCharacterAtlas();
-	const kidRig = new Rig( PROTAGONIST, atlas );
-	const kid = kidRig.createInstance();
+	// the sculpted kid: a posed STL auto-rigged, painted and un-posed at load time
+	const sculpt = await loadSculpt( '/models/catkid-base.stl', '/models/catkid-rig.json' );
+	const kid = sculpt.instance;
 	scene.add( kid.root );
 	const spawnYaw = Math.atan2( SPIRE.x - SPAWN.x, SPIRE.z - SPAWN.z );
 	const player = new PlayerController( physics, { ...SPAWN, yaw: spawnYaw } );
-	const animator = new Animator( kid, PROTAGONIST, KID_STYLE, physics, true );
-	animator.setFaces( makeFaceSet( PROTAGONIST ) );
+	const kidStyle = { ...KID_STYLE, hipHeight: sculpt.hipHeight, stance: Math.abs( sculpt.J.hipL.x - sculpt.J.hipR.x ) / 2 + 0.01, strideMin: 0.5, strideK: 0.12, strideMax: 1.5 };
+	const animator = new Animator( kid, { scale: 1, tail: { segments: 6, segLen: 0.16, radius: 0.04 } }, kidStyle, physics, true );
+	// the animator works in the sculpt's own (taller) space; the root is scaled to 1.62 m, so
+	// ground probes need the inverse scale
+	animator.groundScale = 1 / kid.root.scale.x;
 
 	await progress( 0.74, 'Waking the dead…' );
 	const zombies = new ZombieManager( scene, physics, atlas, city );

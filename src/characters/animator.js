@@ -600,7 +600,7 @@ export class Animator {
 				_b.copy( _a );
 				this.root.localToWorld( _b );
 				const g = this.physics.groundAt( _b.x, _b.z, this.root.position.y + 0.6, 0.9 );
-				gy = clamp( g - this.root.position.y, - 0.35, 0.35 );
+				gy = clamp( g - this.root.position.y, - 0.35, 0.35 ) * ( this.groundScale || 1 );
 				if ( g < - 40 ) gy = 0;
 
 			}
