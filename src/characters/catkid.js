@@ -163,42 +163,51 @@ export class CatKid {
 
 		}
 
-		// cut the long hair into a shaggy bob: drop triangles that hang below the jaw line
-		const neck = this.bonePos( 'neck' );
-		const cutY = neck.y + 0.02;
+		// reshape the long hair into the sheet's shaggy bob: strands below the ear line are compressed
+		// toward the head (so they keep their tapered tips), flicked outward at the ends and pinned to
+		// the head bone so the now-unused hair physics chain can't drag them around
+		const head = this.bonePos( 'head' );
+		const earLine = head.y + 0.055;
+		const jaw = head.y - 0.075;
 		for ( const key of [ 'Hair_00_HAIR', 'HairBack_00_HAIR' ] ) {
 
 			const e = this.meshes[ key ];
 			if ( ! e ) continue;
-			const geo = e.mesh.geometry;
+			const mesh = e.mesh;
+			const geo = mesh.geometry;
 			const pos = geo.attributes.position;
-			if ( ! geo.index ) geo.setIndex( [ ...Array( pos.count ).keys() ] );
-			const idx = geo.index.array;
-			const keep = [];
-			const groups = geo.groups.length ? geo.groups : [ { start: 0, count: idx.length, materialIndex: 0 } ];
-			const newGroups = [];
-			for ( const g of groups ) {
+			const si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
+			const headIndex = mesh.skeleton.bones.indexOf( this.bone( 'head' ) );
+			let minY = Infinity;
+			for ( let i = 0; i < pos.count; i ++ ) minY = Math.min( minY, pos.getY( i ) );
+			for ( let i = 0; i < pos.count; i ++ ) {
 
-				const start = keep.length;
-				for ( let i = g.start; i < g.start + g.count; i += 3 ) {
+				const x = pos.getX( i ), y = pos.getY( i ), z = pos.getZ( i );
+				if ( y >= earLine ) continue;
+				const t = ( earLine - y ) / ( earLine - minY ); // 0 at the ear line, 1 at the old tips
+				// side locks framing the face hang a touch longer than the back
+				const front = z > - 0.02 && Math.abs( x ) > 0.055;
+				const len = ( earLine - jaw ) * ( front ? 1.3 : 1.1 ) * ( 1 + 0.15 * Math.sin( x * 140 + z * 60 ) );
+				const ny = earLine - t * len;
+				// shaggy flick: tips kick outward and slightly back
+				const flick = Math.pow( t, 1.8 ) * 0.03;
+				const nx = x + Math.sign( x ) * flick * ( front ? 0.5 : 1 );
+				const nz = z - flick * 0.6 * ( z < - 0.02 ? 1 : 0 );
+				pos.setXYZ( i, nx, ny, nz );
+				if ( si && headIndex >= 0 ) {
 
-					const a = idx[ i ], b = idx[ i + 1 ], c = idx[ i + 2 ];
-					const x = pos.getX( a ), z = pos.getZ( a );
-					// jagged edge: vary the cut height along the strand's position; side locks hang longer
-					const jag = Math.sin( x * 95 + z * 40 ) * 0.028 + Math.sin( x * 310 + z * 120 ) * 0.018;
-					const lim = cutY + jag - ( Math.abs( x ) > 0.07 && z > - 0.03 ? 0.035 : 0 );
-					if ( Math.max( pos.getY( a ), pos.getY( b ), pos.getY( c ) ) < lim ) continue;
-					keep.push( a, b, c );
+					si.setXYZW( i, headIndex, 0, 0, 0 );
+					sw.setXYZW( i, 1, 0, 0, 0 );
 
 				}
 
-				newGroups.push( { start, count: keep.length - start, materialIndex: g.materialIndex } );
-
 			}
 
-			geo.setIndex( keep );
-			geo.clearGroups();
-			for ( const g of newGroups ) geo.addGroup( g.start, g.count, g.materialIndex );
+			pos.needsUpdate = true;
+			if ( si ) si.needsUpdate = true;
+			if ( sw ) sw.needsUpdate = true;
+			geo.computeVertexNormals();
+			geo.computeBoundingBox();
 
 		}
 
@@ -290,17 +299,17 @@ export class CatKid {
 		// waist block
 		b.beginPart( [ 'hips', 'spine', 'leftUpperLeg', 'rightUpperLeg' ], 1.3 );
 		const hipW = Math.abs( this.bonePos( 'leftUpperLeg' ).x - this.bonePos( 'rightUpperLeg' ).x ) / 2;
-		const waistTop = hips.y + 0.08, waistBottom = hips.y - 0.14;
+		const waistTop = hips.y + 0.0, waistBottom = hips.y - 0.14;
 		b.tube( {
 			path: pathLine( new THREE.Vector3( 0, waistBottom, hips.z ), new THREE.Vector3( 0, waistTop, hips.z ), 5 ), segs: 24, cell: 'denim', color: white, capEnd: true, uvRepeat: [ 3, 1 ],
-			profile: ( t ) => ( { rx: hipW * 1.6 + 0.01, rz: hipW * 1.15 + 0.01, rzBack: hipW * 1.08 + 0.006 } ),
+			profile: ( t ) => ( { rx: hipW * 1.42 + 0.008, rz: hipW * 1.15 + 0.01, rzBack: hipW * 1.05 + 0.004 } ),
 		} );
 		for ( const side of [ 'left', 'right' ] ) {
 
 			b.beginPart( [ 'hips', side + 'UpperLeg', side + 'LowerLeg', side + 'Foot' ], 1.2 );
 			const hp = this.bonePos( side + 'UpperLeg' ), kn = this.bonePos( side + 'LowerLeg' ), an = this.bonePos( side + 'Foot' );
 			const bottom = kn.clone().lerp( an, 0.92 );
-			const path = [ hp.clone().add( new THREE.Vector3( 0, 0.08, 0 ) ), ...pathLine( hp, kn, 6 ).slice( 1 ), ...pathLine( kn, bottom, 6 ).slice( 1 ) ];
+			const path = [ hp.clone().add( new THREE.Vector3( 0, 0.02, 0 ) ), ...pathLine( hp, kn, 6 ).slice( 1 ), ...pathLine( kn, bottom, 6 ).slice( 1 ) ];
 			const legR = Math.max( 0.085, hipW * 1.0 );
 			// stays inside the tee above the hem (t < 0.2), then flares out baggy below it
 			const pr = keyed( [ [ 0, legR * 0.98 ], [ 0.14, legR * 1.02 ], [ 0.26, legR * 1.2 ], [ 0.45, legR * 1.16 ], [ 0.52, legR * 1.12 ], [ 0.85, legR * 1.14 ], [ 0.95, legR * 1.18 ], [ 1, legR * 0.88 ] ] );
