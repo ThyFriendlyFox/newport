@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+	<title>Chat Perché</title>
+	<meta name="description" content="A rooftop cat adventure through Bordeaux — WebGPU in your browser." />
+	<meta name="theme-color" content="#f3c7a0" />
+	<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐈</text></svg>" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+	<div id="app"></div>
+
+	<div id="hud" hidden>
+		<div class="hud-tl">
+			<div class="counter"><span class="pocky-icon"></span><span id="count">0</span><span class="of">/ <span id="total">0</span></span></div>
+			<div class="timer" id="timer">0:00</div>
+			<div class="health" id="health"><div class="health-fill" id="health-fill"></div><span class="health-label">HP</span></div>
+			<div class="kills-row"><span class="skull"></span><span id="kills">0</span></div>
+		</div>
+		<div class="damage" id="damage"></div>
+		<div class="hud-tc">
+			<div class="compass" id="compass">
+				<div class="compass-strip" id="compass-strip"></div>
+				<div class="compass-target" id="compass-target"><span class="dot"></span><span id="target-dist">—</span></div>
+				<div class="compass-tick"></div>
+			</div>
+		</div>
+		<div class="hud-tr">
+			<div class="alt"><span id="alt">0</span><small>m</small></div>
+			<div class="backend" id="backend"></div>
+		</div>
+		<div class="stamina" id="stamina"><div class="stamina-fill" id="stamina-fill"></div></div>
+		<div class="toast" id="toast"></div>
+		<div class="hint" id="hint">WASD move · Shift sprint · Space jump / double jump · jump into a wall to climb · Click / F to kick · Esc to pause</div>
+	</div>
+
+	<div id="touch" hidden>
+		<div class="stick"><div class="knob"></div></div>
+		<button class="btn btn-run" aria-label="Sprint">⚡</button>
+		<button class="btn btn-jump" aria-label="Jump">⤒</button>
+		<button class="btn btn-kick" aria-label="Kick">👟</button>
+	</div>
+
+	<div id="overlay">
+		<div class="card">
+			<div class="kicker">Bordeaux · Place Saint-Michel</div>
+			<h1>Chat Perché</h1>
+			<p class="lede">A cat-eared kid, a city of limestone and terracotta, and <b>30 boxes of Pocky</b> hidden on its streets, rooftops, bridge and river. The golden one waits at the top of the 114&nbsp;m spire. The alleys are not empty: <b>the dead walk</b>, and they can't climb — the rooftops are yours.</p>
+			<div class="controls">
+				<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>move</span></div>
+				<div><kbd>Mouse</kbd><span>look · wheel to zoom</span></div>
+				<div><kbd>Shift</kbd><span>sprint</span></div>
+				<div><kbd>Space</kbd><span>jump · again for a flip</span></div>
+				<div><kbd>Space</kbd><span>toward a wall to climb · climb runs on stamina</span></div>
+				<div><kbd>Click</kbd><kbd>F</kbd><span>kick — three kicks drop a zombie</span></div>
+			</div>
+			<button id="play" disabled><span id="play-label">Building the city…</span></button>
+			<div class="progress"><div id="progress-fill"></div></div>
+			<div class="foot" id="foot"></div>
+		</div>
+	</div>
+
+	<div id="win" hidden>
+		<div class="card">
+			<div class="kicker">Every last stick</div>
+			<h1>Bien joué !</h1>
+			<p class="lede" id="win-text"></p>
+			<button id="again">Keep exploring</button>
+		</div>
+	</div>
+
+	<script type="module" src="/src/main.js"></script>
+</body>
+</html>
