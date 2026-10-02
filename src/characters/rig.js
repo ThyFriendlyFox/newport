@@ -17,7 +17,7 @@ const _c = new THREE.Color();
 // ---------------------------------------------------------------------------------------------
 // Geometry assembly
 
-class SkinnedBuilder {
+export class SkinnedBuilder {
 
 	constructor() {
 
@@ -383,7 +383,7 @@ function buildSkeleton( J, spec ) {
 
 const smooth = ( a, b, t ) => a + ( b - a ) * ( t * t * ( 3 - 2 * t ) );
 // Interpolate a radius keyframe list [[t, value]...]
-function keyed( keys ) {
+export function keyed( keys ) {
 
 	return ( t ) => {
 
@@ -405,7 +405,7 @@ function keyed( keys ) {
 
 }
 
-function pathLine( a, b, n ) {
+export function pathLine( a, b, n ) {
 
 	const out = [];
 	for ( let i = 0; i <= n; i ++ ) out.push( a.clone().lerp( b, i / n ) );
@@ -413,7 +413,7 @@ function pathLine( a, b, n ) {
 
 }
 
-function pathBezier( a, c, b, n ) {
+export function pathBezier( a, c, b, n ) {
 
 	const out = [];
 	for ( let i = 0; i <= n; i ++ ) {
@@ -432,7 +432,7 @@ function pathBezier( a, c, b, n ) {
 }
 
 // rounded end profile multiplier: full radius in the middle, spherical taper at the ends
-const roundEnd = ( t, startR, endR ) => {
+export const roundEnd = ( t, startR, endR ) => {
 
 	let m = 1;
 	if ( startR > 0 && t < startR ) m *= Math.sqrt( Math.max( 0, 1 - Math.pow( 1 - t / startR, 2 ) ) );
