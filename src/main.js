@@ -88,13 +88,13 @@ async function boot() {
 	await progress( 0.68, 'Rigging the cat kid…' );
 	const atlas = createCharacterAtlas();
 	// the sculpted kid: a posed STL auto-rigged, painted and un-posed at load time
-	const sculpt = await loadSculpt( '/models/catkid-base.stl', '/models/catkid-rig.json' );
+	const sculpt = await loadSculpt( '/models/catkid-tpose.stl', '/models/catkid-tpose-rig.json', { pose: 'tpose', teeHem: 0.92, faceDir: new THREE.Vector3( 0, 0, 1 ) } );
 	const kid = sculpt.instance;
 	scene.add( kid.root );
 	const spawnYaw = Math.atan2( SPIRE.x - SPAWN.x, SPIRE.z - SPAWN.z );
 	const player = new PlayerController( physics, { ...SPAWN, yaw: spawnYaw } );
 	const kidStyle = { ...KID_STYLE, hipHeight: sculpt.hipHeight, stance: Math.abs( sculpt.J.hipL.x - sculpt.J.hipR.x ) / 2 + 0.01, strideMin: 0.5, strideK: 0.12, strideMax: 1.5 };
-	const animator = new Animator( kid, { scale: 1, tail: { segments: 6, segLen: 0.16, radius: 0.04 } }, kidStyle, physics, true );
+	const animator = new Animator( kid, { scale: 1, tail: { segments: 8, segLen: 0.08, radius: 0.05, dynamic: false } }, kidStyle, physics, true );
 	// the animator works in the sculpt's own (taller) space; the root is scaled to 1.62 m, so
 	// ground probes need the inverse scale
 	animator.groundScale = 1 / kid.root.scale.x;

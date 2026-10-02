@@ -33,12 +33,15 @@ ground.receiveShadow = true;
 scene.add( ground );
 
 if ( params.has( 'labels' ) ) SculptRig.debugLabels = true;
-const sculpt = await loadSculpt( '/models/catkid-base.stl', '/models/catkid-rig.json', { outline: ! params.has( 'nooutline' ) } );
+const tpose = params.get( 'model' ) !== 'crouch';
+const sculpt = tpose
+	? await loadSculpt( '/models/catkid-tpose.stl', '/models/catkid-tpose-rig.json', { outline: ! params.has( 'nooutline' ), pose: 'tpose', teeHem: 0.92, faceDir: new THREE.Vector3( 0, 0, 1 ) } )
+	: await loadSculpt( '/models/catkid-base.stl', '/models/catkid-rig.json', { outline: ! params.has( 'nooutline' ) } );
 scene.add( sculpt.root );
 window.__sculpt = sculpt;
 const anim = params.get( 'anim' ) || 'idle';
 const style = { ...KID_STYLE, hipHeight: sculpt.hipHeight, stance: Math.abs( sculpt.J.hipL.x - sculpt.J.hipR.x ) / 2 + 0.01 };
-const spec = { scale: 1, tail: { segments: 6, segLen: 0.16, radius: 0.04 } };
+const spec = { scale: 1, tail: { segments: 8, segLen: 0.08, radius: 0.05, dynamic: false } };
 const animator = new Animator( sculpt.instance, spec, style, null, true );
 if ( params.has( 'skel' ) ) scene.add( new THREE.SkeletonHelper( sculpt.root ) );
 if ( anim === 'posed' ) sculpt.toPosed();

@@ -40,7 +40,7 @@ renderer.setAnimationLoop( () => { renderer.render( scene, camera ); window.__fr
 // joint overlay from catkid-rig.json
 try {
 
-	const rig = await ( await fetch( '/models/catkid-rig.json' ) ).json();
+	const rig = await ( await fetch( '/models/' + ( params.get( 'rig' ) || 'catkid-rig.json' ) ) ).json();
 	const colors = { L: 0x2266ff, R: 0xff3322 };
 	for ( const [ name, j ] of Object.entries( rig ) ) {
 

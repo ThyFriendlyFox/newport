@@ -21,8 +21,11 @@ const PAL = {
 	tee: new THREE.Color( 0xf7ee98 ),
 	pants: new THREE.Color( 0x4b6a92 ),
 	croc: new THREE.Color( 0x7f8c3e ),
-	tail: new THREE.Color( 0x3a3a40 ),
+	tail: new THREE.Color( 0x5a5a62 ),
 	silver: new THREE.Color( 0xdde2e8 ),
+	iris: new THREE.Color( 0xc98b2e ),
+	pupil: new THREE.Color( 0x2b1606 ),
+	sclera: new THREE.Color( 0xfbf8f4 ),
 };
 
 // bone tree: name → [ parentName, headJoint, tailJoint, radius, canonical rest direction (world), part ]
@@ -50,8 +53,20 @@ const TREE = [
 	[ 'footR', 'lowerLegR', 'ankleR', 'toeR', 0.11, [ 0, - 0.45, 1 ], 'croc' ],
 	[ 'toeR', 'footR', 'toeR', 'toeEndR', 0.05, [ 0, 0, 1 ], 'croc' ],
 ];
-const TAIL_SEGS = 6;
-for ( let i = 0; i < TAIL_SEGS; i ++ ) TREE.push( [ 'tail' + i, i === 0 ? 'hips' : 'tail' + ( i - 1 ), 'tail' + i, 'tail' + ( i + 1 ), 0.05, [ 0, 0.25 + i * 0.12, - 1 ], 'tail' ] );
+function treeFor( J ) {
+
+	const tree = TREE.filter( ( b ) => b[ 0 ] !== 'teeFront' || J.teeTop );
+	let i = 0;
+	while ( J[ 'tail' + ( i + 1 ) ] ) {
+
+		tree.push( [ 'tail' + i, i === 0 ? 'hips' : 'tail' + ( i - 1 ), 'tail' + i, 'tail' + ( i + 1 ), 0.06, [ 0, 0.25 + i * 0.12, - 1 ], 'tail' ] );
+		i ++;
+
+	}
+
+	return tree;
+
+}
 
 function basis( dir, forward ) {
 
@@ -76,7 +91,7 @@ function distToSegment( p, a, b ) {
 
 }
 
-export async function loadSculpt( stlUrl, rigUrl, { outline = true } = {} ) {
+export async function loadSculpt( stlUrl, rigUrl, { outline = true, pose = 'crouch', teeHem = null, faceDir = null, height = 1.62 } = {} ) {
 
 	const [ geo, rigJson ] = await Promise.all( [ new STLLoader().loadAsync( stlUrl ), ( await fetch( rigUrl ) ).json() ] );
 	geo.rotateX( - Math.PI / 2 ); // Z-up sculpt → Y-up
@@ -87,11 +102,15 @@ export async function loadSculpt( stlUrl, rigUrl, { outline = true } = {} ) {
 	J.clavL = J.chest.clone().lerp( J.shoulderL, 0.25 );
 	J.clavR = J.chest.clone().lerp( J.shoulderR, 0.25 );
 	// the oversized tee drapes forward off the belly in the crouch; give it its own bone
-	J.teeTop = J.spine.clone().lerp( J.chest, 0.5 ).add( new THREE.Vector3( 0, - 0.06, 0.1 ) );
-	J.teeHem = new THREE.Vector3( J.teeTop.x, J.teeTop.y - 0.3, J.teeTop.z + 0.13 );
+	if ( pose === 'crouch' ) {
+
+		J.teeTop = J.spine.clone().lerp( J.chest, 0.5 ).add( new THREE.Vector3( 0, - 0.06, 0.1 ) );
+		J.teeHem = new THREE.Vector3( J.teeTop.x, J.teeTop.y - 0.3, J.teeTop.z + 0.13 );
+
+	}
 	J.toeEndL = J.toeL.clone().add( _v.subVectors( J.toeL, J.ankleL ).setY( 0 ).normalize().multiplyScalar( 0.07 ) );
 	J.toeEndR = J.toeR.clone().add( _v.subVectors( J.toeR, J.ankleR ).setY( 0 ).normalize().multiplyScalar( 0.07 ) );
-	return new SculptRig( geo, J, { outline } );
+	return new SculptRig( geo, J, { outline, pose, teeHem, faceDir, height } );
 
 }
 
@@ -99,9 +118,13 @@ export class SculptRig {
 
 	static debugLabels = false;
 
-	constructor( geo, J, { outline } ) {
+	constructor( geo, J, { outline, pose = 'crouch', teeHem = null, faceDir = null, height = 1.62 } ) {
 
 		this.J = J;
+		this.pose = pose;
+		this.teeHemY = teeHem;
+		this.faceDirOpt = faceDir;
+		this.targetHeight = height;
 		this.geometry = geo;
 		this.root = new THREE.Group();
 		this.root.name = 'sculpt';
@@ -117,6 +140,7 @@ export class SculptRig {
 	poseHint( name ) {
 
 		const J = this.J;
+		if ( this.pose !== 'crouch' ) return this.restHint( name );
 		const perp = ( a, b, mid ) => {
 
 			// component of (mid - a) perpendicular to the a→b line
@@ -179,7 +203,7 @@ export class SculptRig {
 
 		const J = this.J;
 		const bones = [], byName = {}, info = {};
-		for ( const [ name, parent, headJ, tailJ, radius, restDir, part ] of TREE ) {
+		for ( const [ name, parent, headJ, tailJ, radius, restDir, part ] of treeFor( J ) ) {
 
 			const head = J[ headJ ], tail = J[ tailJ ];
 			const dir = tail.clone().sub( head );
@@ -212,6 +236,20 @@ export class SculptRig {
 		this.byName = byName;
 		this.info = info;
 		this.root.updateMatrixWorld( true );
+
+	}
+
+	// Where may a bone seed ownership? Standing poses have simple geometry we can exploit: arms live
+	// at shoulder height (so hair hanging onto the shoulders stays with the head) and the tail
+	// hangs behind the body (so it can't take the back of the trouser legs, or vice-versa).
+	seedOk( b, v ) {
+
+		if ( this.pose === 'crouch' ) return true;
+		const J = this.J, name = b.bone.name;
+		if ( /^(clavicle|upperArm|forearm|hand)/.test( name ) ) return Math.abs( v.y - J.shoulderL.y ) < 0.16;
+		if ( /^(upperLeg|lowerLeg)/.test( name ) ) return v.z > - 0.14;
+		if ( /^tail/.test( name ) ) return v.z < - 0.14 && v.y < J.hips.y + 0.02;
+		return true;
 
 	}
 
@@ -310,6 +348,7 @@ export class SculptRig {
 				const [ d ] = distToSegment( _v, b.head, b.tail );
 				// the sculpt is one fused shell: the fist touches the hair and the hand rests by the
 				// shoe, so extremities pay a premium and can't steal the neighbour's surface
+				if ( ! this.seedOk( b, _v ) ) continue;
 				const premium = /^(hand|toe)/.test( b.bone.name ) ? 1.3 : 1;
 				if ( d < b.radius * 1.8 ) push( ( d / b.radius ) * 0.08 * premium, i, b.index );
 
@@ -352,7 +391,32 @@ export class SculptRig {
 		const infos = Object.values( this.info );
 		const J = this.J;
 		const headC = J.head.clone().lerp( J.headTop, 0.45 );
-		const faceDir = new THREE.Vector3( 0, - 0.35, 1 ).normalize(); // she looks down-forward in the pose
+		const faceDir = this.faceDirOpt ? this.faceDirOpt.clone().normalize() : new THREE.Vector3( 0, - 0.35, 1 ).normalize(); // she looks down-forward in the crouch
+		this.eyes = null;
+		if ( this.pose !== 'crouch' ) {
+
+			// eyes: forward-facing skin surface in the eye band, one cluster per side
+			const eyeY = J.head.y + ( J.headTop.y - J.head.y ) * 0.5;
+			this.eyes = [];
+			for ( const sx of [ - 1, 1 ] ) {
+
+				const acc = new THREE.Vector3(); let cnt = 0;
+				for ( let i = 0; i < n; i ++ ) {
+
+					const x = pos.getX( i ), y = pos.getY( i ), z = pos.getZ( i );
+					if ( Math.sign( x ) !== sx || Math.abs( x ) < 0.02 || Math.abs( x ) > 0.075 || Math.abs( y - eyeY ) > 0.03 ) continue;
+					if ( infos[ label[ i ] ].bone.name !== 'head' || nrm.getZ( i ) < 0.75 ) continue;
+					acc.x += x; acc.y += y; acc.z += z; cnt ++;
+
+				}
+
+				if ( cnt ) this.eyes.push( acc.divideScalar( cnt ).add( new THREE.Vector3( 0, - 0.012, 0 ) ) ); // centroid sits on the lid bulge; the slit is just below
+
+			}
+
+			console.log( 'eyes at', this.eyes.map( ( e ) => e.toArray().map( ( v ) => v.toFixed( 3 ) ).join( ',' ) ) );
+
+		}
 		const c = new THREE.Color();
 		const counts = {};
 		for ( let i = 0; i < n; i ++ ) {
@@ -364,7 +428,7 @@ export class SculptRig {
 			// bones never mix, which keeps the un-posing from smearing across limbs.
 			const cand = [ b ];
 			if ( b.bone.parent && b.bone.parent.isBone ) cand.push( this.info[ b.bone.parent.name ] );
-			for ( const ch of b.bone.children ) if ( ch.isBone && cand.length < 4 ) cand.push( this.info[ ch.name ] );
+			if ( ! b.bone.name.startsWith( 'clavicle' ) ) for ( const ch of b.bone.children ) if ( ch.isBone && cand.length < 4 ) cand.push( this.info[ ch.name ] );
 			let sum = 0;
 			const ws = cand.map( ( cb ) => {
 
@@ -408,6 +472,21 @@ export class SculptRig {
 			} else if ( part === 'pants' && b.bone.name.startsWith( 'upperLeg' ) && t < 0.12 && _v.y > J.hips.y - 0.02 ) {
 
 				part = 'tee';
+
+			}
+
+			if ( part === 'pants' && this.pose !== 'crouch' && _v.z < - 0.15 && _v.y < J.hips.y ) part = 'tail'; // tail root behind the hips
+			if ( part === 'skin' && this.eyes ) {
+
+				for ( const e of this.eyes ) {
+
+					const d = Math.hypot( _v.x - e.x, _v.y - e.y );
+					if ( _v.z < e.z - 0.03 ) continue;
+					if ( d < 0.006 ) part = 'pupil';
+					else if ( d < 0.014 ) part = 'iris';
+					else if ( d < 0.022 ) part = 'sclera';
+
+				}
 
 			}
 
@@ -456,6 +535,7 @@ export class SculptRig {
 
 		this.skeleton = new THREE.Skeleton( this.bones );
 		this.material = new AnimeMaterial( { shadowTint: 0xd08a90, rim: 0.3, sway: false } );
+		this.material.side = THREE.DoubleSide;
 		this.mesh = new THREE.SkinnedMesh( this.geometry, this.material );
 		this.mesh.castShadow = true;
 		this.mesh.receiveShadow = false;
@@ -481,7 +561,9 @@ export class SculptRig {
 		for ( const name of Object.keys( this.info ) ) {
 
 			const b = this.info[ name ];
-			const q = new THREE.Quaternion().setFromRotationMatrix( basis( b.restDir, this.restHint( name ) ) );
+			const q = name.startsWith( 'tail' ) && this.pose !== 'crouch'
+				? new THREE.Quaternion().setFromRotationMatrix( basis( b.tail.clone().sub( b.head ), this.poseHint( name ) ) )
+				: new THREE.Quaternion().setFromRotationMatrix( basis( b.restDir, this.restHint( name ) ) );
 			worldQ[ name ] = q;
 			const parent = b.bone.parent;
 			const pq = parent && parent.isBone ? worldQ[ parent.name ] : new THREE.Quaternion();
@@ -497,15 +579,25 @@ export class SculptRig {
 		const legLen = this.info.upperLegL.length + this.info.lowerLegL.length;
 		const ankleH = this.info.footL.length * 0.45;
 		const hipDrop = this.J.hips.y - ( this.J.hipL.y + this.J.hipR.y ) / 2;
-		this.hipHeight = legLen + ankleH + hipDrop;
+		this.hipHeight = this.pose === 'crouch' ? legLen + ankleH + hipDrop : this.J.hips.y;
 		hips.position.set( 0, this.hipHeight, 0 );
 		this.ankleH = ankleH;
 		this.root.updateMatrixWorld( true );
 		for ( const bone of this.bones ) bone.userData.bindWorldQ = new THREE.Quaternion().setFromRotationMatrix( bone.matrixWorld );
 		// standing height from the rest skeleton → scale the whole character to the sheet's 1.62 m
-		const headTop = this.hipHeight + this.info.spine.length + this.info.chest.length + this.info.neck.length + this.info.head.length;
-		this.standingHeight = headTop + this.info.hips.length;
-		this.root.scale.setScalar( 1.62 / this.standingHeight );
+		if ( this.pose === 'crouch' ) {
+
+			const headTop = this.hipHeight + this.info.spine.length + this.info.chest.length + this.info.neck.length + this.info.head.length;
+			this.standingHeight = headTop + this.info.hips.length;
+
+		} else {
+
+			this.geometry.computeBoundingBox();
+			this.standingHeight = this.geometry.boundingBox.max.y - 0.1; // ear tips stick above the head
+
+		}
+
+		this.root.scale.setScalar( this.targetHeight / this.standingHeight );
 		console.log( 'sculpt standing height', this.standingHeight.toFixed( 2 ), 'hip', this.hipHeight.toFixed( 2 ) );
 
 	}

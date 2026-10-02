@@ -728,10 +728,12 @@ export class Animator {
 	initTail() {
 
 		const T = this.spec.tail;
-		for ( let i = 0; i < T.segments; i ++ ) {
+		for ( let i = 0; this.b[ 'tail' + i ]; i ++ ) {
 
 			const bone = this.b[ 'tail' + i ];
-			this.tail.push( { bone, pos: new THREE.Vector3(), prev: new THREE.Vector3(), len: T.segLen * this.s } );
+			const child = bone.children.find( ( c ) => c.isBone );
+			const len = child ? child.position.length() : ( bone.userData.length || T.segLen * this.s );
+			this.tail.push( { bone, pos: new THREE.Vector3(), prev: new THREE.Vector3(), len } );
 
 		}
 
@@ -761,8 +763,21 @@ export class Animator {
 
 		}
 
-		// tail: verlet chain in world space, anchored to its first bone
-		if ( this.tail.length ) {
+		// sculpted tails keep their modelled hang and just sway
+		if ( this.tail.length && this.spec.tail.dynamic === false ) {
+
+			const run = this.runF, moving = this.moveF;
+			const w = this.time * ( 1.8 + run * 2.5 );
+			this.tail.forEach( ( n, i ) => {
+
+				const k = i / this.tail.length;
+				_e.set( Math.sin( w - i * 0.7 ) * 0.05 * ( 0.3 + k ) * ( 1 + moving ) - ( st.grounded ? 0 : 0.08 * k ), 0, Math.sin( w * 0.6 - i * 0.5 ) * 0.07 * k * ( 1 + moving ) );
+				_q.setFromEuler( _e );
+				n.bone.quaternion.copy( n.bone.userData.bind ).multiply( _q );
+
+			} );
+
+		} else if ( this.tail.length ) {
 
 			const T = this.tail;
 			const anchorBone = T[ 0 ].bone;
