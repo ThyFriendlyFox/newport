@@ -105,12 +105,12 @@ export class AnimeMaterial extends THREE.MeshToonNodeMaterial {
 
 }
 
-export function makeOutlineMaterial( colorHex = 0x2a2030, thickness = 0.004 ) {
+export function makeOutlineMaterial( colorHex = 0x2a2030, thickness = 0.004, tint = null ) {
 
 	const m = new THREE.MeshBasicNodeMaterial( { side: THREE.BackSide } );
 	const outlineCol = uniform( new THREE.Color( colorHex ) );
 	// tint the line with the surface colour so hair outlines stay in hue
-	m.colorNode = mix( vec3( outlineCol ), attribute( 'color', 'vec3' ).mul( 0.35 ), 0.4 );
+	m.colorNode = mix( vec3( outlineCol ), tint ? vec3( uniform( tint.clone().multiplyScalar( 0.35 ) ) ) : attribute( 'color', 'vec3' ).mul( 0.35 ), 0.4 );
 	// constant-ish screen thickness: scale by distance to camera
 	m.positionNode = positionLocal.add( normalLocal.mul( float( thickness ) ) );
 	m.thickness = thickness;
