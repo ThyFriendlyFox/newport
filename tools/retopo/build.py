@@ -101,7 +101,7 @@ class Part:
                 c = f.calc_center_median()
                 near = mean if len(f.verts) > 4 else min(centers, key=lambda q: (q - c).length_squared)
                 f.normal_update()
-                if f.normal.dot(c - near) < 0: f.normal_flip()
+                if f.normal.dot((c - near).normalized()) < -0.25: f.normal_flip()
         if smooth_iters:
             bmesh.ops.smooth_vert(self.bm, verts=self.bm.verts, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
         me = bpy.data.meshes.new(self.name)
@@ -182,17 +182,17 @@ def spine_at(z):
             t = (z - z0) / max(1e-6, z1 - z0)
             c = p0.lerp(p1, t); return Vector((c.x, c.y, z))
     return Vector((hips.x, hips.y, z))
-Zs = [0.92, 0.96, 1.00, 1.05, 1.10, 1.16, 1.22, 1.28, 1.33, 1.37, 1.40, 1.43, 1.46, 1.49]
+Zs = [0.92, 0.96, 1.00, 1.05, 1.10, 1.16, 1.22, 1.28, 1.33, 1.37, 1.40, 1.43, 1.46, 1.49, 1.52]
 rings = []
 for k, z in enumerate(Zs):
     c = spine_at(z)
-    max_r = 0.23 if z < 1.36 else {1.37: 0.21, 1.40: 0.21, 1.43: 0.205, 1.46: 0.19, 1.49: 0.16}.get(z, 0.2)   # shoulder slope; rays would otherwise run down the fused arm
+    max_r = 0.23 if z < 1.36 else {1.37: 0.21, 1.40: 0.21, 1.43: 0.21, 1.46: 0.2, 1.49: 0.18, 1.52: 0.13}.get(z, 0.2)   # shoulder slope; rays would otherwise run down the fused arm
     rings.append((ring(c, Vector((1, 0, 0)), Vector((0, 1, 0)), 24, max_r, 0.12), k / (len(Zs) - 1)))
 tee.tube(rings, close_end=True, centers=[spine_at(z) for z in Zs])
 for side in (1, -1):
     sh = J('shoulderL') if side > 0 else J('shoulderR')
     ax = Vector((side, 0, 0)); u, v = frame(ax)
-    xs = [0.19, 0.22, 0.25, 0.29, 0.32, 0.335]
+    xs = [0.205, 0.23, 0.26, 0.29, 0.32, 0.335]
     rings = []
     for k, x in enumerate(xs):
         c = Vector((side * x, sh.y, sh.z - 0.01))
@@ -320,7 +320,7 @@ def smooth_field(F, iters, keep_max=False):
         F = G
     return F
 HAIR_R = smooth_field(R, 3, keep_max=True)
-SKIN_R = smooth_field(R, 1)   # lightly smoothed raw surface: close to the skull where there is no hair
+SKIN_R = smooth_field(R, 3)   # smoothed raw surface
 r_face = 0.142
 def skull_r(phi, th):
     """Anime skull: round cranium, cheeks tapering into a small chin, flatter face plane."""
@@ -334,15 +334,21 @@ def skull_r(phi, th):
     r *= 1 - 0.06 * max(0, front) ** 3                      # flatten the face plane
     return r
 # face shell: front sector between brow and chin; everything else is hair
+def hairline(th):
+    """Hand-drawn hairline height: brow line at the front with jagged bangs, dropping to the
+    ear/jaw at the sides and the nape at the back."""
+    front = math.cos(th); side = abs(math.sin(th))
+    brow = 1.735 + 0.02 * math.sin(th * 7.0) + 0.012 * math.sin(th * 13.0 + 1.0)
+    if front > 0.5: return brow
+    if front > -0.2: return 1.62 + (front - (-0.2)) / 0.7 * (brow - 1.62) * 0.8
+    return 1.55
 def face_cell(i, j):
     phi = (i + 0.5) / NLAT * math.pi; th = ((j + 0.5) / NLON) * math.tau
     front = math.cos(th)
     z = hc.z + math.cos(phi) * r_face * 1.1
     if z < 1.50: return False
-    bang = SKIN_R[i][j] > skull_r(phi, th) * 1.12   # the sculpted bangs/side locks hang here
-    if front > 0.42 and z < 1.76: return not bang
-    if front > 0.0 and z < 1.66: return not bang       # cheeks/jaw sides
-    return False
+    if front < -0.15: return False
+    return z < hairline(th)
 face = Part('face', MAT['faceskin']); hair = Part('hair', MAT['hair'])
 for part in (face, hair):
     part.gv = [[None] * NLON for _ in range(NLAT + 1)]
@@ -350,7 +356,8 @@ def gv(part, i, j, is_face):
     if part.gv[i][j] is None:
         phi = i / NLAT * math.pi; th = j / NLON * math.tau
         d = sph_dir(phi, th)
-        r = skull_r(phi, th) if is_face else max(HAIR_R[i][j], skull_r(phi, th) + 0.012)
+        skin = 0.5 * skull_r(phi, th) + 0.5 * min(SKIN_R[i][j], skull_r(phi, th) * 1.12)
+        r = skin if is_face else max(HAIR_R[i][j], skin + 0.014)
         part.gv[i][j] = part.bm.verts.new(hc + d * r)
     return part.gv[i][j]
 for i in range(NLAT):
@@ -363,7 +370,7 @@ for i in range(NLAT):
         if i == 0: vs = vs[1:]; quad = quad[1:]
         if i == NLAT - 1: vs = vs[:3]; quad = quad[:3]
         if len(set(vs)) < 3: continue
-        if part is hair and hc.z + math.cos((i + 0.5) / NLAT * math.pi) * r_face * 1.1 < 1.50 and SKIN_R[i][j] < skull_r((i + 0.5) / NLAT * math.pi, (j + 0.5) / NLON * math.tau) * 1.12: continue
+        if part is hair and hc.z + math.cos((i + 0.5) / NLAT * math.pi) * r_face * 1.1 < 1.52 and math.cos((j + 0.5) / NLON * math.tau) > -0.15: continue
         try: f = part.bm.faces.new(vs)
         except ValueError: continue
         for l, (a, b) in zip(f.loops, quad):
@@ -374,10 +381,10 @@ for i in range(NLAT):
 for i in range(NLAT):
     for j in range(NLON):
         if face_cell(i, j): continue
-        if hc.z + math.cos((i + 0.5) / NLAT * math.pi) * r_face * 1.1 < 1.50: continue
+        if hc.z + math.cos((i + 0.5) / NLAT * math.pi) * r_face * 1.1 < 1.54: continue
         j2 = (j + 1) % NLON
         quad = [(i, j), (i, j2), (i + 1, j2), (i + 1, j)]
-        vs = [gv(face, a, b, True) for a, b in quad]
+        vs = [gv(face, a, b, True) for a, b in quad]  # closed skull under the hair
         if i == 0: vs = vs[1:]; quad = quad[1:]
         if i == NLAT - 1: vs = vs[:3]; quad = quad[:3]
         if len(set(vs)) < 3: continue

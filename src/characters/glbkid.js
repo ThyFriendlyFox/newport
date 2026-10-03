@@ -63,6 +63,7 @@ export async function loadGlbKid( url = '/models/catkid.glb', { outline = true, 
 		mat.vertexColors = false;
 		mat.color.copy( color );
 		if ( name.includes( 'hair' ) || name.includes( 'ear' ) ) mat.params.hair = true;
+		if ( name.includes( 'tee' ) || name.includes( 'hair' ) ) mat.side = THREE.DoubleSide;
 		m.material = mat;
 		m.castShadow = true;
 		m.receiveShadow = false;
